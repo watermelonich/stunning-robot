@@ -31,11 +31,11 @@ python3 -m http.server 8000
 
 ## Deploying to GitHub Pages
 
-1. Create a new GitHub repository and push this folder to it (commonly named `<your-username>.github.io` for a user site, or any name for a project site).
+1. Create a new GitHub repository and push this folder to it (commonly named `watermelonich.github.io` for a user site, or any name for a project site).
 2. In the repo, go to **Settings → Pages**.
 3. Under **Build and deployment**, set **Source** to `Deploy from a branch`.
 4. Choose the `main` branch and `/ (root)` folder, then save.
-5. GitHub will publish the site at `https://<your-username>.github.io/<repo-name>/` (or `https://<your-username>.github.io/` for a user site repo). It usually takes a minute or two for the first deploy.
+5. GitHub will publish the site at `https://watermelonich.github.io/stunning-robot/` (or `https://watermelonich.github.io/` for a user site repo). It usually takes a minute or two for the first deploy.
 
 Because every internal link uses relative paths (`css/style.css`, `blog/index.html`, `../index.html`, etc.), the site works identically whether it's hosted at the domain root or in a subpath — no config changes needed either way.
 
