@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JWT Attacks: alg Confusion, kid Injection, and Weak Secrets — worr4bl33hwder</title>
+  <meta name="description" content="A tour of the most common JWT implementation mistakes I still find in production, years after they were first disclosed." />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="site-header" id="site-header">
+    <div class="container nav-wrap">
+      <a href="../index.html" class="brand"><span class="brand-prompt">worr4bl33hwder</span><span class="cursor-blink">_</span></a>
+      <nav class="nav-links" id="nav-links">
+        <a href="../index.html#about">about</a>
+        <a href="../index.html#focus">focus</a>
+        <a href="../index.html#writeups">writeups</a>
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact" class="nav-cta">contact</a>
+      </nav>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="post-header">
+      <div class="container">
+        <div class="post-meta">
+          <span class="tag-pill">Auth</span><span>Dec 12, 2025</span><span>&middot;</span><span>9 min read</span>
+        </div>
+        <h1>JWT Attacks: alg Confusion, kid Injection, and Weak Secrets</h1>
+        <p class="lead">These bugs were first written about years ago. I still find them in production today.</p>
+      </div>
+    </section>
+
+    <section class="post-body">
+      <div class="container">
+        <article class="article">
+          <div class="disclaimer"><strong>Heads up:</strong> Educational content only. Only test systems you're explicitly authorized to test, and always follow the rules of the program you're hacking on.</div>
+
+          <div class="callout">
+            <strong>TL;DR</strong>
+            Before touching any of the classic JWT attacks, just read the header and claims. Half the time the interesting bug is sitting in plain sight &mdash; a weak secret, a permissive <code>kid</code>, or an <code>alg</code> the server shouldn't be honoring.
+          </div>
+
+          <p>A JWT is three base64url-encoded segments &mdash; header, payload, signature &mdash; separated by dots. None of it is encrypted, all of it is trivially decodable, and the entire security model rests on the server correctly verifying that signature before trusting anything in the payload. Most JWT bugs come from libraries or custom code that get that verification step subtly wrong.</p>
+
+          <h2>Start by just decoding it</h2>
+          <pre><code>echo "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" | base64 -d
+# {"alg":"HS256","typ":"JWT"}</code></pre>
+          <p>Check the header for the algorithm in use and whether a <code>kid</code> (key ID) field is present, and check the payload for the claims being trusted &mdash; role, user ID, permissions, expiry. This alone tells you which of the attacks below are even worth attempting.</p>
+
+          <h2>1. alg: none</h2>
+          <p>The JWT spec technically allows an <code>alg</code> of <code>none</code>, meaning no signature at all. Some libraries, if not explicitly configured to reject it, will accept a token with <code>{"alg":"none"}</code> and an empty signature segment as valid:</p>
+          <pre><code>header:  {"alg":"none","typ":"JWT"}
+payload: {"sub":"1234","role":"admin"}
+token:   eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0Iiwicm9sZSI6ImFkbWluIn0.</code></pre>
+          <p>Note the trailing dot with nothing after it &mdash; no signature. If the server accepts this, you can set any claim you want, including a role of your choosing.</p>
+
+          <h2>2. RS256 → HS256 algorithm confusion</h2>
+          <p>When a server uses RS256, it verifies signatures with a public key and signs with a private key the client never sees. Some verification libraries, though, will happily verify an HS256 token too &mdash; and HS256 uses one shared secret for both signing and verifying. If an attacker can get the RS256 public key (often published at a <code>/.well-known/jwks.json</code> endpoint or embedded in a mobile app), they can craft their own token, sign it with HS256 using the public key as the HMAC secret, and if the server's verification code doesn't strictly pin the expected algorithm, it may treat that signature as valid.</p>
+          <p>The fix is on the server side &mdash; explicitly pin the expected algorithm during verification rather than trusting whatever the token's header claims. Worth testing whenever RS256 is in use and a public key is reachable.</p>
+
+          <h2>3. kid header injection</h2>
+          <p>The <code>kid</code> claim tells the server which key to use for verification, which is convenient for key rotation and a liability when the value is used unsafely:</p>
+          <ul>
+            <li><strong>Path traversal</strong> &mdash; if <code>kid</code> is used to build a file path (<code>/keys/{kid}.pem</code>), a value like <code>../../../../dev/null</code> might point verification at a predictable or empty file, which combined with algorithm confusion can mean an attacker-known "key"</li>
+            <li><strong>SQL injection</strong> &mdash; if <code>kid</code> is used in a database lookup without parameterization, classic SQLi payloads are worth testing there specifically</li>
+            <li><strong>Arbitrary key via jku/x5u</strong> &mdash; some implementations honor a <code>jku</code> (JWK Set URL) or <code>x5u</code> (X.509 URL) header, fetching the verification key from a URL supplied inside the token itself. If the server doesn't strictly allow-list acceptable hosts, pointing it at a server you control means you supply both the token and the "trusted" key used to verify it.</li>
+          </ul>
+
+          <h2>4. Weak or guessable HMAC secrets</h2>
+          <p>HS256 tokens are only as strong as the shared secret. Short, dictionary-word, or default secrets (frameworks that ship a placeholder value in example config that never gets changed) can be brute-forced offline once you have a single valid token:</p>
+          <pre><code>jwt_tool eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abc123 \
+  -C -d /usr/share/wordlists/jwt-secrets.txt</code></pre>
+          <p>If the secret cracks, you can forge arbitrary tokens with any claims you like, signed correctly, indistinguishable from a legitimate one.</p>
+
+          <h2>5. Missing expiry or signature verification entirely</h2>
+          <p>Occasionally the simplest bug is true: the server decodes the JWT and reads claims from it without ever calling the actual verify function, or it verifies the signature but never checks <code>exp</code>. A token captured months ago might still work indefinitely. Always check both independently &mdash; a library call named <code>verify</code> doesn't guarantee every check you'd assume is bundled into it.</p>
+
+          <div class="callout warn">
+            <strong>A note on scope</strong>
+            Brute-forcing secrets and forging tokens directly affects authentication &mdash; treat it with the same care as any other account takeover testing, stick to your own test accounts, and stop as soon as impact is demonstrated.
+          </div>
+
+          <div class="callout">
+            <strong>Key takeaways</strong>
+            <ul style="margin-top:8px;">
+              <li>Decode the token first &mdash; the header alone often tells you what to try</li>
+              <li>Test alg confusion whenever RS256 is used and the public key is reachable</li>
+              <li>Treat kid as untrusted input; look for path traversal, injection, and jku/x5u abuse</li>
+              <li>Attempt an offline secret crack against HS256 tokens with a known wordlist</li>
+              <li>Verify that expiry is actually checked, not just the signature</li>
+            </ul>
+          </div>
+
+          <div class="post-footer">
+            <div class="post-nav">
+              <a href="subdomain-takeovers.html">
+                <span>&larr; previous</span>
+                <span class="title">Subdomain Takeovers: Finding Dangling DNS Before Attackers Do</span>
+              </a>
+              <a class="next" href="writing-better-bug-bounty-reports.html">
+                <span>next &rarr;</span>
+                <span class="title">Writing Bug Bounty Reports That Actually Get Triaged (and Paid)</span>
+              </a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-wrap">
+      <p>&copy; <span id="year"></span> worr4bl33hwder. Built with HTML, CSS &amp; vanilla JS. No trackers, no cookies, no frameworks.</p>
+      <div class="footer-links">
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact">contact</a>
+        <a href="https://github.com/watermelonich" target="_blank" rel="noopener noreferrer">github</a>
+      </div>
+    </div>
+  </footer>
+
+  <button class="back-to-top" id="back-to-top" aria-label="Back to top">&uarr;</button>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/blog.js"></script>
+</body>
+</html>

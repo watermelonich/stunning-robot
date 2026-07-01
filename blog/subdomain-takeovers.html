@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Subdomain Takeovers: Finding Dangling DNS Before Attackers Do — worr4bl33hwder</title>
+  <meta name="description" content="A dangling CNAME is one of the cheapest criticals in bug bounty — here's how I find them fast." />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="site-header" id="site-header">
+    <div class="container nav-wrap">
+      <a href="../index.html" class="brand"><span class="brand-prompt">worr4bl33hwder</span><span class="cursor-blink">_</span></a>
+      <nav class="nav-links" id="nav-links">
+        <a href="../index.html#about">about</a>
+        <a href="../index.html#focus">focus</a>
+        <a href="../index.html#writeups">writeups</a>
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact" class="nav-cta">contact</a>
+      </nav>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="post-header">
+      <div class="container">
+        <div class="post-meta">
+          <span class="tag-pill">Recon</span><span>Nov 19, 2025</span><span>&middot;</span><span>7 min read</span>
+        </div>
+        <h1>Subdomain Takeovers: Finding Dangling DNS Before Attackers Do</h1>
+        <p class="lead">A forgotten CNAME pointing at a service nobody claimed anymore is one of the cheapest criticals in bug bounty.</p>
+      </div>
+    </section>
+
+    <section class="post-body">
+      <div class="container">
+        <article class="article">
+          <div class="disclaimer"><strong>Heads up:</strong> Educational content only. Only test systems you're explicitly authorized to test, and always follow the rules of the program you're hacking on.</div>
+
+          <div class="callout">
+            <strong>TL;DR</strong>
+            A subdomain with a CNAME pointing at a third-party service that no longer has anything registered at that address can often be claimed by anyone &mdash; including you, for testing, or an attacker, for phishing and cookie theft against your target's own domain.
+          </div>
+
+          <p>Subdomain takeover happens when a DNS record &mdash; almost always a CNAME &mdash; still points at an external service (a PaaS host, a static site provider, a cloud storage bucket) that the organization stopped using and never removed the DNS entry for. If that service allows anyone to register the now-unclaimed name, whoever gets there first effectively owns content served under the target's own domain.</p>
+
+          <h2>Why it's a critical, not a curiosity</h2>
+          <p>The subdomain still resolves under the organization's real domain &mdash; <code>promo.target.com</code>, not some obviously-fake lookalike. That means:</p>
+          <ul>
+            <li>Phishing pages hosted there inherit the domain's trust in a victim's eyes</li>
+            <li>Cookies scoped to the parent domain (<code>Domain=.target.com</code>) can sometimes be read or set from the takeover subdomain, depending on how session cookies are scoped</li>
+            <li>Content Security Policies that allow-list the parent domain or its subdomains may end up trusting attacker-controlled content</li>
+          </ul>
+
+          <h2>Finding candidates</h2>
+          <p>Start from a full subdomain list (see my recon methodology post for how I build that), then resolve each one and inspect the CNAME chain specifically, not just the final A record:</p>
+          <pre><code>for sub in $(cat all_subs.txt); do
+  cname=$(dig +short CNAME "$sub")
+  if [ -n "$cname" ]; then
+    echo "$sub -> $cname"
+  fi
+done > cname_map.txt</code></pre>
+          <p>Anything pointing at a known third-party service domain (<code>*.github.io</code>, <code>*.herokuapp.com</code>, <code>*.s3.amazonaws.com</code>, <code>*.azurewebsites.net</code>, <code>*.wpengine.com</code>, and dozens of others) goes on a shortlist to check individually.</p>
+
+          <h2>Confirming it's actually dangling</h2>
+          <p>A CNAME pointing at a service domain doesn't automatically mean it's takeover-ready &mdash; the target might still legitimately own that resource. Request the subdomain directly and look for a service-specific "not found" signature:</p>
+          <pre><code>curl -s -i https://promo.target.com/ | head -n 20
+
+# GitHub Pages, for example, often responds with:
+# 404: There isn't a GitHub Pages site here.
+
+# Some S3 bucket takeovers respond with:
+# <Error><Code>NoSuchBucket</Code></Error></code></pre>
+          <p>Each provider has its own recognizable "nothing is registered here" fingerprint. Automated tools track a large, regularly updated list of these:</p>
+          <pre><code>nuclei -l all_subs.txt -t takeovers/ -o takeover_candidates.txt
+# or
+subjack -w all_subs.txt -t 50 -timeout 30 -o subjack_results.txt -ssl</code></pre>
+
+          <h2>Claiming it (within program rules)</h2>
+          <p>If a program's scope and rules of engagement explicitly allow proof-of-concept claims, the general process is: register an account with the third-party provider the dangling CNAME points to, claim the exact matching custom domain or app name on your own account there, and confirm the target subdomain now serves content from your account instead of a "not found" page. Screenshot that state as proof, then <strong>immediately release or delete the claim</strong> and report the finding &mdash; don't leave attacker-controllable infrastructure sitting live under someone else's domain any longer than it takes to prove impact.</p>
+
+          <div class="callout warn">
+            <strong>This one has real-world consequences if handled carelessly</strong>
+            An unclaimed takeover left live, even briefly, under a real organization's domain is a genuine risk to anyone who visits it during that window. Only attempt a claim when the program's scope explicitly permits it, minimize how long you hold the claim, host nothing but a clearly labeled proof-of-concept page, and report immediately.
+          </div>
+
+          <h2>Why this keeps happening</h2>
+          <p>DNS entries and the resources they point to are managed by different teams on different timelines. A marketing team spins up a campaign microsite on a PaaS host, the campaign ends, someone deletes the app from the hosting provider's dashboard, and the DNS record pointing at it was never anyone's explicit responsibility to clean up. Multiply that across every campaign, integration, and "temporary" project an organization has run for years, and the dangling records add up.</p>
+
+          <div class="callout">
+            <strong>Key takeaways</strong>
+            <ul style="margin-top:8px;">
+              <li>Map CNAME chains specifically, not just final resolved IPs</li>
+              <li>Match against known "unclaimed" response fingerprints per provider</li>
+              <li>Only attempt an actual claim when scope explicitly allows it, and release it immediately after proof</li>
+              <li>Recommend the fix in your report: remove the DNS record as part of any decommissioning checklist</li>
+            </ul>
+          </div>
+
+          <div class="post-footer">
+            <div class="post-nav">
+              <a href="index.html">
+                <span>&larr; back to blog</span>
+                <span class="title">All Posts</span>
+              </a>
+              <a class="next" href="jwt-attacks-alg-confusion.html">
+                <span>next &rarr;</span>
+                <span class="title">JWT Attacks: alg Confusion, kid Injection, and Weak Secrets</span>
+              </a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-wrap">
+      <p>&copy; <span id="year"></span> worr4bl33hwder. Built with HTML, CSS &amp; vanilla JS. No trackers, no cookies, no frameworks.</p>
+      <div class="footer-links">
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact">contact</a>
+        <a href="https://github.com/watermelonich" target="_blank" rel="noopener noreferrer">github</a>
+      </div>
+    </div>
+  </footer>
+
+  <button class="back-to-top" id="back-to-top" aria-label="Back to top">&uarr;</button>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/blog.js"></script>
+</body>
+</html>

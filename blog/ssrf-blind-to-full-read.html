@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SSRF Hunting: From Blind Callbacks to Full Internal Read — worr4bl33hwder</title>
+  <meta name="description" content="Where SSRF actually hides in modern apps, and how a blind out-of-band callback turns into full internal network read." />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="site-header" id="site-header">
+    <div class="container nav-wrap">
+      <a href="../index.html" class="brand"><span class="brand-prompt">worr4bl33hwder</span><span class="cursor-blink">_</span></a>
+      <nav class="nav-links" id="nav-links">
+        <a href="../index.html#about">about</a>
+        <a href="../index.html#focus">focus</a>
+        <a href="../index.html#writeups">writeups</a>
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact" class="nav-cta">contact</a>
+      </nav>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="post-header">
+      <div class="container">
+        <div class="post-meta">
+          <span class="tag-pill">Server-Side</span><span>May 02, 2026</span><span>&middot;</span><span>10 min read</span>
+        </div>
+        <h1>SSRF Hunting: From Blind Callbacks to Full Internal Read</h1>
+        <p class="lead">Any feature that makes an outbound request on your behalf is a feature worth testing. Here's where those features hide and how I escalate them.</p>
+      </div>
+    </section>
+
+    <section class="post-body">
+      <div class="container">
+        <article class="article">
+          <div class="disclaimer"><strong>Heads up:</strong> Educational content only. Only test systems you're explicitly authorized to test, and always follow the rules of the program you're hacking on.</div>
+
+          <div class="callout">
+            <strong>TL;DR</strong>
+            Find every feature that fetches a URL you supply, confirm the request fires with an out-of-band callback, then work through internal IPs, cloud metadata endpoints, and alternate schemes to see how far the app will let that request travel.
+          </div>
+
+          <p>Server-Side Request Forgery is what happens when an application will fetch a URL on your behalf and you get to choose &mdash; even partially &mdash; what that URL points to. It's one of my favorite bug classes because the impact ranges from "mildly annoying" to "full read access to your internal network" depending entirely on how much the backend trusts its own outbound requests.</p>
+
+          <h2>Where SSRF actually lives</h2>
+          <p>Forget looking for a text box labeled "URL." The real candidates are usually features that don't look like networking at all:</p>
+          <ul>
+            <li><strong>Webhooks</strong> &mdash; "notify this URL when an event happens" is SSRF-by-design unless it's locked down</li>
+            <li><strong>URL preview / link unfurling</strong> &mdash; chat apps and messaging features that show a thumbnail for a pasted link</li>
+            <li><strong>PDF and document generators</strong> &mdash; anything built on a headless browser (wkhtmltopdf, Puppeteer) that renders attacker-supplied HTML or fetches remote assets</li>
+            <li><strong>Image processing</strong> &mdash; "import avatar from URL" style features</li>
+            <li><strong>SSO / SAML metadata URLs</strong> &mdash; some identity provider configs let you point at an arbitrary metadata endpoint</li>
+            <li><strong>Import/export integrations</strong> &mdash; "connect your RSS feed," "import from this API," anything with a base URL field</li>
+          </ul>
+
+          <h2>Step 1: Prove the request fires at all</h2>
+          <p>Before worrying about internal IPs, confirm the server actually makes an outbound request using a domain you control &mdash; either your own listener or an out-of-band interaction service. Point the vulnerable parameter at it:</p>
+          <pre><code>POST /api/v1/webhooks HTTP/1.1
+Host: app.target.com
+Content-Type: application/json
+
+{"callback_url": "http://your-oob-domain.example/probe-1"}</code></pre>
+          <p>A hit on your listener confirms blind SSRF. No hit doesn't necessarily mean it's safe &mdash; check whether the request happens asynchronously (queued job, background worker) before giving up; those can take seconds to minutes to fire.</p>
+
+          <h2>Step 2: See how far the leash goes</h2>
+          <p>Once outbound requests are confirmed, the real question is what the backend can reach that a normal user can't. Things worth trying, scoped to what the target program explicitly allows:</p>
+          <ul>
+            <li><strong>Loopback and internal ranges</strong> &mdash; <code>127.0.0.1</code>, <code>169.254.0.0/16</code>, RFC1918 space, and the app's own internal service ports</li>
+            <li><strong>Cloud metadata endpoints</strong> &mdash; <code>169.254.169.254</code> is the well-known metadata address on most major cloud providers, and depending on the platform and IMDS version in use, it can expose instance role credentials to anything running on the box</li>
+            <li><strong>Alternate URL schemes</strong> &mdash; some HTTP client libraries happily follow <code>file://</code>, <code>gopher://</code>, or <code>dict://</code> if the app doesn't explicitly restrict schemes</li>
+            <li><strong>DNS rebinding</strong> &mdash; a hostname that resolves to a public IP at validation time and an internal IP at request time, useful against apps that validate the URL once and fetch it later</li>
+          </ul>
+
+          <div class="callout warn">
+            <strong>Scope this one carefully</strong>
+            Poking at cloud metadata and internal services can have real consequences depending on what's actually running there. Stick to what the program's scope explicitly permits, stop as soon as you've proven impact, and never pull or exfiltrate more data than a screenshot or short snippet requires.
+          </div>
+
+          <h2>Bypassing naive filters</h2>
+          <p>A lot of apps do attempt SSRF protection, just not very well. Common gaps:</p>
+          <ul>
+            <li>Blocklisting <code>localhost</code> and <code>127.0.0.1</code> but forgetting <code>127.0.0.2</code>, <code>0.0.0.0</code>, or the IPv6 loopback <code>::1</code></li>
+            <li>Checking the hostname before a redirect, then blindly following a 3xx response to wherever it points</li>
+            <li>Validating the initial DNS resolution but not pinning the connection to that resolved IP (the DNS rebinding case above)</li>
+            <li>Decimal, octal, or hex-encoded IP representations that parse differently across libraries &mdash; e.g. <code>2130706433</code> as a decimal form of <code>127.0.0.1</code></li>
+          </ul>
+
+          <h2>Chaining for bigger impact</h2>
+          <p>Blind SSRF that just proves an outbound request fired is a real but modest finding. It gets significantly more severe when you can chain it into:</p>
+          <ul>
+            <li>Reading the response body back (via an error message, a rendered PDF, or an "import successful" preview) &mdash; turning blind SSRF into full internal read</li>
+            <li>Hitting an internal admin API with no auth because it "trusts requests from inside the network"</li>
+            <li>Retrieving temporary cloud credentials from a metadata endpoint and using them against the provider's own API, if in scope</li>
+          </ul>
+
+          <div class="callout">
+            <strong>Key takeaways</strong>
+            <ul style="margin-top:8px;">
+              <li>Any "fetch a URL for me" feature is worth testing, even ones that don't look like networking</li>
+              <li>Prove the request fires out-of-band before worrying about escalation</li>
+              <li>Check whether the app validates the URL once and fetches later &mdash; that's where DNS rebinding lives</li>
+              <li>Escalate toward reading the response back; blind is good, readable is better</li>
+            </ul>
+          </div>
+
+          <div class="post-footer">
+            <div class="post-nav">
+              <a href="race-conditions-bug-bounty.html">
+                <span>&larr; previous</span>
+                <span class="title">Race Conditions in Web Apps: Winning the Bug Bounty Lottery</span>
+              </a>
+              <a class="next" href="xss-bypassing-csp-2025.html">
+                <span>next &rarr;</span>
+                <span class="title">XSS in 2025: Bypassing Filters, CSPs, and Framework Sanitization</span>
+              </a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-wrap">
+      <p>&copy; <span id="year"></span> worr4bl33hwder. Built with HTML, CSS &amp; vanilla JS. No trackers, no cookies, no frameworks.</p>
+      <div class="footer-links">
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact">contact</a>
+        <a href="https://github.com/watermelonich" target="_blank" rel="noopener noreferrer">github</a>
+      </div>
+    </div>
+  </footer>
+
+  <button class="back-to-top" id="back-to-top" aria-label="Back to top">&uarr;</button>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/blog.js"></script>
+</body>
+</html>

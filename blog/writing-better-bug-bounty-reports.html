@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Writing Bug Bounty Reports That Actually Get Triaged (and Paid) — worr4bl33hwder</title>
+  <meta name="description" content="The report structure I use to cut down back-and-forth with triagers and get paid faster." />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="site-header" id="site-header">
+    <div class="container nav-wrap">
+      <a href="../index.html" class="brand"><span class="brand-prompt">worr4bl33hwder</span><span class="cursor-blink">_</span></a>
+      <nav class="nav-links" id="nav-links">
+        <a href="../index.html#about">about</a>
+        <a href="../index.html#focus">focus</a>
+        <a href="../index.html#writeups">writeups</a>
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact" class="nav-cta">contact</a>
+      </nav>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="post-header">
+      <div class="container">
+        <div class="post-meta">
+          <span class="tag-pill">Career</span><span>Jan 08, 2026</span><span>&middot;</span><span>6 min read</span>
+        </div>
+        <h1>Writing Bug Bounty Reports That Actually Get Triaged (and Paid)</h1>
+        <p class="lead">The bug finds the vulnerability. The report decides whether it gets paid, and how fast.</p>
+      </div>
+    </section>
+
+    <section class="post-body">
+      <div class="container">
+        <article class="article">
+          <div class="disclaimer"><strong>Heads up:</strong> Educational content only. This post is about report writing practice, not a specific vulnerability.</div>
+
+          <div class="callout">
+            <strong>TL;DR</strong>
+            Lead with impact, give exact reproduction steps a stranger could follow without asking a single question, attach proof, and suggest a fix. Everything else is optional padding.
+          </div>
+
+          <p>I've had technically identical bugs get triaged in an hour and get stuck in "needs more info" for two weeks, and the only difference was the report. Triagers read a lot of submissions. A report that respects their time gets prioritized, and getting prioritized is most of the battle.</p>
+
+          <h2>The structure I use every time</h2>
+          <ol>
+            <li><strong>Title</strong> &mdash; specific enough to be searchable later: "IDOR on <code>/api/v1/invoices/{id}</code> allows reading any user's invoice PDF," not "IDOR vulnerability found"</li>
+            <li><strong>Summary</strong> &mdash; two or three sentences: what the bug is, where it is, and what an attacker gains</li>
+            <li><strong>Severity / impact</strong> &mdash; my own CVSS estimate or the program's severity rubric, plus a plain-English sentence on real-world impact</li>
+            <li><strong>Steps to reproduce</strong> &mdash; numbered, exact, no assumed context</li>
+            <li><strong>Proof of concept</strong> &mdash; request/response pairs, a screenshot, or a short screen recording</li>
+            <li><strong>Suggested fix</strong> &mdash; even a one-liner shows you understand the root cause, not just the symptom</li>
+          </ol>
+
+          <h2>Steps to reproduce: assume nothing</h2>
+          <p>The single biggest source of triage delay is a report that only makes sense to the person who wrote it. Compare:</p>
+          <pre><code>Bad:
+"Change the invoice ID in the URL and you can see other people's invoices."
+
+Good:
+1. Log in as Account A (testuser1@example.com).
+2. Navigate to Billing > Invoices, open any invoice, note the URL:
+   https://app.target.com/invoices/48213
+3. Change 48213 to 48214 (an invoice belonging to Account B) and reload.
+4. Observe the page loads Account B's invoice, including full name,
+   address, and itemized charges, while still authenticated as Account A.</code></pre>
+          <p>A triager should be able to follow your steps without opening a second tab to ask you a clarifying question. Every clarifying question is a round trip that can take days depending on the program's response time.</p>
+
+          <h2>Proof beats prose</h2>
+          <p>A raw HTTP request and response, or a 20-second screen recording, resolves ambiguity faster than any amount of written explanation. I include both whenever the bug allows it:</p>
+          <pre><code>GET /invoices/48214 HTTP/1.1
+Host: app.target.com
+Cookie: session=&lt;account-A-session&gt;
+
+HTTP/1.1 200 OK
+{"id":48214,"owner":"account-B","total":"389.50", ...}</code></pre>
+          <p>Redact session tokens and personal data belonging to real accounts before submitting anything, and use your own test accounts wherever possible instead of real user data.</p>
+
+          <h2>State the impact like you mean it, but don't oversell</h2>
+          <p>"This could potentially maybe lead to..." undersells a bug you've already proven. "This allows any authenticated user to read every other user's invoices, including full billing addresses" states exactly what you demonstrated. At the same time, don't inflate a low-severity finding by chaining hypotheticals that you haven't actually shown &mdash; triagers see through that quickly, and it costs credibility on your next report too.</p>
+
+          <h2>Handling "Not Applicable" and duplicates gracefully</h2>
+          <p>Search existing reports before submitting when the program allows it, since duplicates simply don't pay regardless of how good the write-up is. When a report does come back N/A or informative and you genuinely disagree, a short, specific, evidence-based rebuttal is worth sending once. A second or third attempt to argue the same point rarely changes the outcome and does cost goodwill with the team on future reports.</p>
+
+          <h2>Response time matters more than people think</h2>
+          <p>When a triager asks a follow-up question, answering within a few hours instead of a few days keeps your report near the top of their queue. Reports that go quiet for a week on the researcher's side often get deprioritized simply because the triager moved on to newer submissions.</p>
+
+          <div class="callout">
+            <strong>Key takeaways</strong>
+            <ul style="margin-top:8px;">
+              <li>Lead with a specific title and a short, clear impact summary</li>
+              <li>Write reproduction steps for a stranger with zero context</li>
+              <li>Attach proof &mdash; request/response pairs or a short recording</li>
+              <li>State impact accurately; don't undersell or oversell it</li>
+              <li>Respond fast to triager questions &mdash; it affects prioritization more than people expect</li>
+            </ul>
+          </div>
+
+          <div class="post-footer">
+            <div class="post-nav">
+              <a href="jwt-attacks-alg-confusion.html">
+                <span>&larr; previous</span>
+                <span class="title">JWT Attacks: alg Confusion, kid Injection, and Weak Secrets</span>
+              </a>
+              <a class="next" href="graphql-security-pitfalls.html">
+                <span>next &rarr;</span>
+                <span class="title">GraphQL Security Pitfalls I Keep Finding in Bug Bounty Programs</span>
+              </a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-wrap">
+      <p>&copy; <span id="year"></span> worr4bl33hwder. Built with HTML, CSS &amp; vanilla JS. No trackers, no cookies, no frameworks.</p>
+      <div class="footer-links">
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact">contact</a>
+        <a href="https://github.com/watermelonich" target="_blank" rel="noopener noreferrer">github</a>
+      </div>
+    </div>
+  </footer>
+
+  <button class="back-to-top" id="back-to-top" aria-label="Back to top">&uarr;</button>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/blog.js"></script>
+</body>
+</html>

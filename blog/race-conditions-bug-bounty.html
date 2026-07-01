@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Race Conditions in Web Apps: Winning the Bug Bounty Lottery — worr4bl33hwder</title>
+  <meta name="description" content="Coupons that redeem twice, limits that don't hold, and the single-packet trick that makes races reliable." />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="site-header" id="site-header">
+    <div class="container nav-wrap">
+      <a href="../index.html" class="brand"><span class="brand-prompt">worr4bl33hwder</span><span class="cursor-blink">_</span></a>
+      <nav class="nav-links" id="nav-links">
+        <a href="../index.html#about">about</a>
+        <a href="../index.html#focus">focus</a>
+        <a href="../index.html#writeups">writeups</a>
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact" class="nav-cta">contact</a>
+      </nav>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="post-header">
+      <div class="container">
+        <div class="post-meta">
+          <span class="tag-pill">Logic Flaws</span><span>Apr 11, 2026</span><span>&middot;</span><span>7 min read</span>
+        </div>
+        <h1>Race Conditions in Web Apps: Winning the Bug Bounty Lottery</h1>
+        <p class="lead">If a limit is checked and then applied in two separate steps, there's a window between them. Race condition bugs live in that window.</p>
+      </div>
+    </section>
+
+    <section class="post-body">
+      <div class="container">
+        <article class="article">
+          <div class="disclaimer"><strong>Heads up:</strong> Educational content only. Only test systems you're explicitly authorized to test, and always follow the rules of the program you're hacking on.</div>
+
+          <div class="callout">
+            <strong>TL;DR</strong>
+            Any "check, then act" logic &mdash; check balance, then deduct; check redemption count, then redeem &mdash; has a race window. Fire the requests as close to simultaneously as possible and see if the check can be satisfied more than once.
+          </div>
+
+          <p>Race conditions used to be a pain to exploit reliably over HTTP because network jitter meant your parallel requests rarely landed at exactly the same moment on the server. That got a lot easier once the "single-packet attack" technique became common knowledge &mdash; and it's now one of the highest reward-to-effort bug classes in bounty hunting, because so much backend logic still assumes requests arrive one at a time.</p>
+
+          <h2>The pattern to look for</h2>
+          <p>Almost every race condition bug follows the same shape in the backend code, something like:</p>
+          <pre><code>1. SELECT balance FROM accounts WHERE id = ?
+2. if balance >= amount:
+3.     UPDATE accounts SET balance = balance - amount WHERE id = ?
+4.     process_withdrawal(amount)</code></pre>
+          <p>Between step 2 and step 3, the balance hasn't been touched yet. If you fire two withdrawal requests at the exact same instant, both can pass the check at step 2 before either one completes step 3 &mdash; and you get two withdrawals approved against a balance that should only have covered one.</p>
+
+          <h2>Where this shows up in real features</h2>
+          <ul>
+            <li><strong>Coupon and gift card redemption</strong> &mdash; redeeming a single-use code twice</li>
+            <li><strong>Referral and signup bonuses</strong> &mdash; claiming a one-time reward multiple times</li>
+            <li><strong>Rate limits and quotas</strong> &mdash; exceeding an "N actions per day" limit by submitting them in parallel</li>
+            <li><strong>Account actions with uniqueness constraints</strong> &mdash; adding the same email as a team member twice before the first request's uniqueness check commits</li>
+            <li><strong>Voting, liking, or review submission</strong> &mdash; bypassing "one action per user" logic</li>
+          </ul>
+
+          <h2>The single-packet technique</h2>
+          <p>Sending parallel requests from a script and hoping they land close enough together is unreliable &mdash; connection setup and TLS handshakes introduce enough jitter that the race window often closes before your second request arrives. The more reliable approach, popularized by PortSwigger's research and implemented in Burp Suite's Turbo Intruder, is to open the underlying TCP connections ahead of time and hold the requests back until the very last byte, then release them within microseconds of each other over HTTP/2 or pipelined HTTP/1.1. That collapses network jitter almost entirely and makes the race window a matter of server-side processing time instead of network timing.</p>
+
+          <pre><code># Turbo Intruder — conceptual sketch of a race test
+def queueRequests(target, wordlists):
+    engine = RequestEngine(endpoint=target.endpoint,
+                            concurrentConnections=1,
+                            engine=Engine.BURP2)
+
+    for i in range(20):
+        engine.queue(target.req, gate='race1')
+
+    engine.openGate('race1')  # release all queued requests together
+
+def handleResponse(req, interesting):
+    table.add(req)</code></pre>
+
+          <h2>Confirming the bug is real, not just noisy</h2>
+          <p>Before reporting, I make sure the result is consistent and clearly beyond normal behavior:</p>
+          <ul>
+            <li>Repeat the test a few times &mdash; a single lucky double-redemption could be a fluke; a reliable one at, say, 15 successful duplicate redemptions out of 20 attempts is a real bug</li>
+            <li>Confirm the end state is actually wrong (balance, redemption count, or database record), not just that two responses came back 200</li>
+            <li>Note whether the app uses a queue or job runner for the sensitive step &mdash; that changes where the race window actually is</li>
+          </ul>
+
+          <h2>Why this is still so common</h2>
+          <p>Fixing race conditions properly means atomic database operations (a single <code>UPDATE ... WHERE balance >= amount</code> statement instead of separate read-then-write), row-level locking, or idempotency keys on the client request. All three require deliberate design decisions that "make the happy path work" development doesn't naturally produce, which is exactly why this bug class hasn't gone anywhere even as awareness of it has grown.</p>
+
+          <div class="callout">
+            <strong>Key takeaways</strong>
+            <ul style="margin-top:8px;">
+              <li>Look for any "check a limit, then perform an action" logic</li>
+              <li>Use connection warming / single-packet techniques instead of naive parallel requests</li>
+              <li>Confirm the end state actually changed, not just that you got multiple 200 responses</li>
+              <li>Idempotency keys and atomic queries are the fix &mdash; call that out in your report</li>
+            </ul>
+          </div>
+
+          <div class="post-footer">
+            <div class="post-nav">
+              <a href="recon-methodology.html">
+                <span>&larr; previous</span>
+                <span class="title">My Recon Methodology for Bug Bounty Targets</span>
+              </a>
+              <a class="next" href="ssrf-blind-to-full-read.html">
+                <span>next &rarr;</span>
+                <span class="title">SSRF Hunting: From Blind Callbacks to Full Internal Read</span>
+              </a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-wrap">
+      <p>&copy; <span id="year"></span> worr4bl33hwder. Built with HTML, CSS &amp; vanilla JS. No trackers, no cookies, no frameworks.</p>
+      <div class="footer-links">
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact">contact</a>
+        <a href="https://github.com/watermelonich" target="_blank" rel="noopener noreferrer">github</a>
+      </div>
+    </div>
+  </footer>
+
+  <button class="back-to-top" id="back-to-top" aria-label="Back to top">&uarr;</button>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/blog.js"></script>
+</body>
+</html>

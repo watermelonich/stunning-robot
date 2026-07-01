@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Breaking Access Control: A Practical Guide to Finding IDORs — worr4bl33hwder</title>
+  <meta name="description" content="The methodology I use to map objects, spot missing authorization checks, and turn horizontal IDOR bugs into critical findings." />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="site-header" id="site-header">
+    <div class="container nav-wrap">
+      <a href="../index.html" class="brand"><span class="brand-prompt">worr4bl33hwder</span><span class="cursor-blink">_</span></a>
+      <nav class="nav-links" id="nav-links">
+        <a href="../index.html#about">about</a>
+        <a href="../index.html#focus">focus</a>
+        <a href="../index.html#writeups">writeups</a>
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact" class="nav-cta">contact</a>
+      </nav>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="post-header">
+      <div class="container">
+        <div class="post-meta">
+          <span class="tag-pill">Access Control</span><span>Jun 18, 2026</span><span>&middot;</span><span>9 min read</span>
+        </div>
+        <h1>Breaking Access Control: A Practical Guide to Finding IDORs</h1>
+        <p class="lead">Insecure Direct Object References are unglamorous, unfashionable, and still one of the most reliable ways to find a critical in any program with an ID in the URL.</p>
+      </div>
+    </section>
+
+    <section class="post-body">
+      <div class="container">
+        <article class="article">
+          <div class="disclaimer"><strong>Heads up:</strong> Educational content only. Only test systems you're explicitly authorized to test, and always follow the rules of the program you're hacking on.</div>
+
+          <div class="callout">
+            <strong>TL;DR</strong>
+            Create two low-privilege test accounts, map every object reference in the app (not just numbers in URLs), and try to read, write, and delete Account B's data while authenticated as Account A. Do it for every endpoint, not just the obvious ones.
+          </div>
+
+          <p>IDOR &mdash; Insecure Direct Object Reference &mdash; is the bug class I've reported more than any other, and it's not close. It doesn't need a fancy payload, it doesn't need a WAF bypass, and it doesn't care how modern your frontend framework is. It just needs a backend that checks <em>"is this user logged in?"</em> without ever asking <em>"is this user allowed to touch this specific object?"</em></p>
+
+          <p>Automated scanners are bad at finding these because the request looks completely valid. The status code is 200. The response is well-formed JSON. Nothing about the traffic screams "vulnerability" unless you know whose data you're supposed to be looking at.</p>
+
+          <h2>Step 1: Build a proper test matrix</h2>
+          <p>Before touching a single endpoint, I set up:</p>
+          <ul>
+            <li>Two accounts at the lowest available privilege tier (Account A, Account B)</li>
+            <li>One account at a higher tier if the app has roles (admin, org owner, support agent)</li>
+            <li>Objects created under each account &mdash; orders, documents, messages, invites, API keys, whatever the app deals in</li>
+          </ul>
+          <p>The goal is to have two authenticated sessions where I know exactly which objects belong to which account. Without that, you can't tell an authorization bug from a bug in your own test setup.</p>
+
+          <h2>Step 2: Map every object reference, not just the URL</h2>
+          <p>Numeric IDs in the URL path are the easy case. The bugs that pay better hide in:</p>
+          <ul>
+            <li><strong>Request bodies</strong> &mdash; <code>{"invoice_id": 4821}</code> buried in a POST</li>
+            <li><strong>Query strings</strong> &mdash; <code>?export=user_4821.csv</code></li>
+            <li><strong>Headers</strong> &mdash; some apps pass a resource ID in a custom header for "performance reasons"</li>
+            <li><strong>GraphQL node IDs</strong> &mdash; often base64-encoded, e.g. <code>SW52b2ljZTo0ODIx</code> decodes to <code>Invoice:4821</code></li>
+            <li><strong>WebSocket messages</strong> &mdash; easy to miss if you're only watching the HTTP tab</li>
+            <li><strong>File names and exports</strong> &mdash; PDFs, CSVs, and ZIPs that get generated with a predictable or sequential name</li>
+          </ul>
+
+          <h2>Step 3: The swap test</h2>
+          <p>With Account A authenticated, request an object you know belongs to Account B. Here's the generic shape of the test:</p>
+
+          <pre><code>GET /api/v1/invoices/48213 HTTP/1.1
+Host: app.target.com
+Cookie: session=&lt;account-A-session&gt;
+
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"id":48213,"owner":"account-A","total":"1,204.00","pdf_url":"/files/invoice_48213.pdf"}</code></pre>
+
+          <p>Now increment the ID to one that belongs to Account B and repeat the exact same request, same Account A session:</p>
+
+          <pre><code>GET /api/v1/invoices/48214 HTTP/1.1
+Host: app.target.com
+Cookie: session=&lt;account-A-session&gt;
+
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"id":48214,"owner":"account-B","total":"389.50","pdf_url":"/files/invoice_48214.pdf"}</code></pre>
+
+          <p>If that second response comes back 200 with Account B's data, you've got a horizontal access control bug. If Account A is a regular user and you can pull data that should require an admin role, that's vertical privilege escalation, and it usually scores higher.</p>
+
+          <h3>Don't stop at read</h3>
+          <p>Read-only IDOR gets triaged. Read-write IDOR gets paid. Always follow up the GET test with:</p>
+          <ul>
+            <li><code>PUT</code> / <code>PATCH</code> &mdash; can you modify Account B's object?</li>
+            <li><code>DELETE</code> &mdash; can you remove it entirely?</li>
+            <li>State-changing actions &mdash; can you cancel Account B's order, revoke their API key, or add yourself to their team?</li>
+          </ul>
+
+          <div class="callout warn">
+            <strong>Scope carefully</strong>
+            Write and delete tests against another account's real data are exactly the kind of thing that can cause real damage. Use disposable test accounts and objects you created yourself whenever a program allows it, and never run destructive tests against a target you don't fully control unless the program scope explicitly permits it.
+          </div>
+
+          <h2>Where IDOR actually hides</h2>
+          <p>After a while you start noticing patterns in where this bug class clusters:</p>
+          <ul>
+            <li><strong>Support and chat transcripts</strong> &mdash; ticket IDs are rarely checked as carefully as the main app</li>
+            <li><strong>Notification and activity feeds</strong> &mdash; <code>/api/notifications/{id}/mark-read</code> is a classic</li>
+            <li><strong>Bulk/export endpoints</strong> &mdash; CSV and PDF generation code is often bolted on later and skips the auth middleware everything else uses</li>
+            <li><strong>Admin panels exposed to regular staff roles</strong> &mdash; internal tools built fast, with authorization as an afterthought</li>
+            <li><strong>Anything behind a "share" or "public link" feature</strong> &mdash; predictable tokens are IDOR wearing a disguise</li>
+          </ul>
+
+          <h2>Tooling that speeds this up</h2>
+          <p>Manual testing is how you learn the app, but at scale I lean on:</p>
+          <ul>
+            <li><strong>Burp Suite's Autorize / Auth Analyzer</strong> extensions &mdash; replay every request with a second session's cookie automatically</li>
+            <li>A small <strong>Python match-and-replace script</strong> against a saved Burp history export, useful when the object reference is buried somewhere Autorize doesn't reach</li>
+            <li><strong>diffing responses</strong> between the "should fail" and "known good" request to catch subtle authorization checks that return 200 with an empty or redacted body instead of a proper 403/404</li>
+          </ul>
+
+          <h2>Writing it up</h2>
+          <p>The report that gets paid fastest includes: the exact request that should have been rejected, the two account identities involved, a screenshot or short clip showing Account A viewing Account B's data, and a one-line explanation of impact ("any authenticated user can read every other user's invoices by incrementing this ID"). No filler, no exploit theory &mdash; just proof.</p>
+
+          <div class="callout">
+            <strong>Key takeaways</strong>
+            <ul style="margin-top:8px;">
+              <li>Test every object reference, not just numeric IDs in the URL</li>
+              <li>Always test write and delete, not just read</li>
+              <li>Look in exports, notifications, and support tooling first &mdash; that's where checks get forgotten</li>
+              <li>A clean two-account proof beats a long paragraph every time</li>
+            </ul>
+          </div>
+
+          <div class="post-footer">
+            <div class="post-nav">
+              <a href="xss-bypassing-csp-2025.html">
+                <span>&larr; previous</span>
+                <span class="title">XSS in 2025: Bypassing Filters, CSPs, and Framework Sanitization</span>
+              </a>
+              <a class="next" href="index.html">
+                <span>back to blog &rarr;</span>
+                <span class="title">All Posts</span>
+              </a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-wrap">
+      <p>&copy; <span id="year"></span> worr4bl33hwder. Built with HTML, CSS &amp; vanilla JS. No trackers, no cookies, no frameworks.</p>
+      <div class="footer-links">
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact">contact</a>
+        <a href="https://github.com/watermelonich" target="_blank" rel="noopener noreferrer">github</a>
+      </div>
+    </div>
+  </footer>
+
+  <button class="back-to-top" id="back-to-top" aria-label="Back to top">&uarr;</button>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/blog.js"></script>
+</body>
+</html>

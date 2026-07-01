@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blog — worr4bl33hwder</title>
+  <meta name="description" content="Write-ups on web application security, bug bounty methodology, and the vulnerability classes I find most in the wild." />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="site-header" id="site-header">
+    <div class="container nav-wrap">
+      <a href="../index.html" class="brand"><span class="brand-prompt">worr4bl33hwder</span><span class="cursor-blink">_</span></a>
+      <nav class="nav-links" id="nav-links">
+        <a href="../index.html#about">about</a>
+        <a href="../index.html#focus">focus</a>
+        <a href="../index.html#writeups">writeups</a>
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact" class="nav-cta">contact</a>
+      </nav>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="blog-hero">
+      <div class="container">
+        <span class="eyebrow reveal">blog</span>
+        <h1 class="section-heading reveal">$ ls -la writeups/</h1>
+        <p class="section-sub reveal">Methodology, vulnerability classes, and the occasional rant about report triage. All educational &mdash; only test what you&rsquo;re authorized to test.</p>
+      </div>
+    </section>
+
+    <section class="post-body" style="padding-top: 0;">
+      <div class="container">
+        <div class="blog-toolbar reveal">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="20" y1="20" x2="15.5" y2="15.5"/></svg>
+            <input type="text" id="blog-search" placeholder="grep -i 'topic'" aria-label="Search blog posts" />
+          </div>
+          <div class="filter-bar" role="group" aria-label="Filter posts by category">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="access-control">Access Control</button>
+            <button class="filter-btn" data-filter="client-side">Client-Side</button>
+            <button class="filter-btn" data-filter="server-side">Server-Side</button>
+            <button class="filter-btn" data-filter="logic-flaws">Logic Flaws</button>
+            <button class="filter-btn" data-filter="recon">Recon</button>
+            <button class="filter-btn" data-filter="auth">Auth</button>
+            <button class="filter-btn" data-filter="api-security">API Security</button>
+            <button class="filter-btn" data-filter="career">Career</button>
+          </div>
+        </div>
+
+        <div class="blog-grid">
+          <a class="post-card reveal" href="idor-access-control-guide.html" data-post data-category="access-control" data-search="idor access control guide bola authorization horizontal vertical privilege escalation">
+            <div class="post-meta"><span class="tag-pill">Access Control</span><span>Jun 18, 2026</span><span>&middot;</span><span>9 min</span></div>
+            <h3>Breaking Access Control: A Practical Guide to Finding IDORs</h3>
+            <p>The methodology I use to map objects, spot missing authorization checks, and turn horizontal bugs into critical findings.</p>
+            <span class="read-more">Read writeup</span>
+          </a>
+
+          <a class="post-card reveal" href="xss-bypassing-csp-2025.html" data-post data-category="client-side" data-search="xss cross site scripting csp bypass sanitization dom mutation framework react vue">
+            <div class="post-meta"><span class="tag-pill">Client-Side</span><span>May 27, 2026</span><span>&middot;</span><span>8 min</span></div>
+            <h3>XSS in 2025: Bypassing Filters, CSPs, and Framework Sanitization</h3>
+            <p>Modern frontend frameworks changed how XSS shows up in the wild &mdash; not whether it still does.</p>
+            <span class="read-more">Read writeup</span>
+          </a>
+
+          <a class="post-card reveal" href="ssrf-blind-to-full-read.html" data-post data-category="server-side" data-search="ssrf server side request forgery blind cloud metadata webhook internal">
+            <div class="post-meta"><span class="tag-pill">Server-Side</span><span>May 02, 2026</span><span>&middot;</span><span>10 min</span></div>
+            <h3>SSRF Hunting: From Blind Callbacks to Full Internal Read</h3>
+            <p>Where SSRF actually hides in modern apps, and how a blind out-of-band callback turns into full internal network read.</p>
+            <span class="read-more">Read writeup</span>
+          </a>
+
+          <a class="post-card reveal" href="race-conditions-bug-bounty.html" data-post data-category="logic-flaws" data-search="race condition toctou single packet attack turbo intruder logic flaw">
+            <div class="post-meta"><span class="tag-pill">Logic Flaws</span><span>Apr 11, 2026</span><span>&middot;</span><span>7 min</span></div>
+            <h3>Race Conditions in Web Apps: Winning the Bug Bounty Lottery</h3>
+            <p>Coupons that redeem twice, limits that don&rsquo;t hold, and the single-packet trick that makes races reliable.</p>
+            <span class="read-more">Read writeup</span>
+          </a>
+
+          <a class="post-card reveal" href="recon-methodology.html" data-post data-category="recon" data-search="recon methodology subdomain enumeration osint automation pipeline js analysis">
+            <div class="post-meta"><span class="tag-pill">Recon</span><span>Mar 20, 2026</span><span>&middot;</span><span>11 min</span></div>
+            <h3>My Recon Methodology for Bug Bounty Targets</h3>
+            <p>How I go from a bare root domain to a prioritized list of interesting targets, and the pipeline that automates most of it.</p>
+            <span class="read-more">Read writeup</span>
+          </a>
+
+          <a class="post-card reveal" href="oauth-misconfigurations.html" data-post data-category="auth" data-search="oauth misconfiguration redirect uri state csrf account takeover sso pkce">
+            <div class="post-meta"><span class="tag-pill">Auth</span><span>Feb 25, 2026</span><span>&middot;</span><span>8 min</span></div>
+            <h3>OAuth Misconfigurations: A Bug Bounty Hunter&rsquo;s Checklist</h3>
+            <p>Redirect URI validation, state parameters, and the handful of OAuth mistakes that keep leading to account takeover.</p>
+            <span class="read-more">Read writeup</span>
+          </a>
+
+          <a class="post-card reveal" href="graphql-security-pitfalls.html" data-post data-category="api-security" data-search="graphql api security introspection batching aliasing nested query denial of service">
+            <div class="post-meta"><span class="tag-pill">API Security</span><span>Jan 30, 2026</span><span>&middot;</span><span>9 min</span></div>
+            <h3>GraphQL Security Pitfalls I Keep Finding in Bug Bounty Programs</h3>
+            <p>Introspection left on, batching abuse, and authorization checks that only exist at the REST layer everyone forgot about.</p>
+            <span class="read-more">Read writeup</span>
+          </a>
+
+          <a class="post-card reveal" href="writing-better-bug-bounty-reports.html" data-post data-category="career" data-search="writing bug bounty reports triage severity cvss impact reproduction template career">
+            <div class="post-meta"><span class="tag-pill">Career</span><span>Jan 08, 2026</span><span>&middot;</span><span>6 min</span></div>
+            <h3>Writing Bug Bounty Reports That Actually Get Triaged (and Paid)</h3>
+            <p>The report structure I use to cut down back-and-forth with triagers and get paid faster.</p>
+            <span class="read-more">Read writeup</span>
+          </a>
+
+          <a class="post-card reveal" href="jwt-attacks-alg-confusion.html" data-post data-category="auth" data-search="jwt json web token alg confusion kid injection weak secret hmac rs256 jku x5u">
+            <div class="post-meta"><span class="tag-pill">Auth</span><span>Dec 12, 2025</span><span>&middot;</span><span>9 min</span></div>
+            <h3>JWT Attacks: alg Confusion, kid Injection, and Weak Secrets</h3>
+            <p>A tour of the most common JWT implementation mistakes I still find in production, years after they were first disclosed.</p>
+            <span class="read-more">Read writeup</span>
+          </a>
+
+          <a class="post-card reveal" href="subdomain-takeovers.html" data-post data-category="recon" data-search="subdomain takeover dangling dns cname unclaimed s3 heroku github pages">
+            <div class="post-meta"><span class="tag-pill">Recon</span><span>Nov 19, 2025</span><span>&middot;</span><span>7 min</span></div>
+            <h3>Subdomain Takeovers: Finding Dangling DNS Before Attackers Do</h3>
+            <p>A dangling CNAME is one of the cheapest criticals in bug bounty &mdash; here&rsquo;s how I find them fast.</p>
+            <span class="read-more">Read writeup</span>
+          </a>
+        </div>
+
+        <p class="no-results" id="no-results">No posts match that search. Try a different term or clear the filter.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-wrap">
+      <p>&copy; <span id="year"></span> worr4bl33hwder. Built with HTML, CSS &amp; vanilla JS. No trackers, no cookies, no frameworks.</p>
+      <div class="footer-links">
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact">contact</a>
+        <a href="https://github.com/watermelonich" target="_blank" rel="noopener noreferrer">github</a>
+      </div>
+    </div>
+  </footer>
+
+  <button class="back-to-top" id="back-to-top" aria-label="Back to top">&uarr;</button>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/blog.js"></script>
+</body>
+</html>

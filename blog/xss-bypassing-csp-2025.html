@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XSS in 2025: Bypassing Filters, CSPs, and Framework Sanitization — worr4bl33hwder</title>
+  <meta name="description" content="Modern frontend frameworks changed how XSS shows up in the wild — not whether it still does." />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="site-header" id="site-header">
+    <div class="container nav-wrap">
+      <a href="../index.html" class="brand"><span class="brand-prompt">worr4bl33hwder</span><span class="cursor-blink">_</span></a>
+      <nav class="nav-links" id="nav-links">
+        <a href="../index.html#about">about</a>
+        <a href="../index.html#focus">focus</a>
+        <a href="../index.html#writeups">writeups</a>
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact" class="nav-cta">contact</a>
+      </nav>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="post-header">
+      <div class="container">
+        <div class="post-meta">
+          <span class="tag-pill">Client-Side</span><span>May 27, 2026</span><span>&middot;</span><span>8 min read</span>
+        </div>
+        <h1>XSS in 2025: Bypassing Filters, CSPs, and Framework Sanitization</h1>
+        <p class="lead">React, Vue, and a strict CSP will stop the obvious payloads. They won't stop the ones hiding in your own escape hatches.</p>
+      </div>
+    </section>
+
+    <section class="post-body">
+      <div class="container">
+        <article class="article">
+          <div class="disclaimer"><strong>Heads up:</strong> Educational content only. Only test systems you're explicitly authorized to test, and always follow the rules of the program you're hacking on.</div>
+
+          <div class="callout">
+            <strong>TL;DR</strong>
+            Modern frameworks auto-escape by default, which pushes real-world XSS into the places developers explicitly opted out of escaping, or into CSP configurations that look strict but leave one gap. Find the opt-out, find the gap.
+          </div>
+
+          <p>"XSS is basically dead now that everything uses React" is a sentence I hear a lot, usually right before I find one. Auto-escaping templates and Content Security Policy raised the floor, but they didn't remove the bug class &mdash; they just moved it into more specific, more interesting places.</p>
+
+          <h2>The three flavors, still alive and well</h2>
+          <ul>
+            <li><strong>Reflected</strong> &mdash; input from the request is echoed back into the response unescaped, usually in server-rendered error pages, search results, or legacy endpoints that never got migrated to the new frontend</li>
+            <li><strong>Stored</strong> &mdash; input is saved and rendered later for other users; profile fields, comments, and support tickets are the classics</li>
+            <li><strong>DOM-based</strong> &mdash; the vulnerable sink is entirely client-side JavaScript; the payload never has to touch the server to fire</li>
+          </ul>
+
+          <h2>Where frameworks quietly turn escaping off</h2>
+          <p>Every major frontend framework gives developers an explicit way to render raw HTML, because sometimes you genuinely need to. That escape hatch is where I look first:</p>
+          <ul>
+            <li><strong>React</strong> &mdash; <code>dangerouslySetInnerHTML</code>. The name is basically a warning label, and yet it still gets fed user-controlled markdown-to-HTML output more often than you'd expect.</li>
+            <li><strong>Vue</strong> &mdash; <code>v-html</code>. Same idea, same risk, especially in CMS-style apps rendering "rich text" fields.</li>
+            <li><strong>Angular</strong> &mdash; <code>bypassSecurityTrustHtml</code> and friends in the <code>DomSanitizer</code> API. If a developer had to explicitly tell Angular to trust something, that's exactly what I want to test.</li>
+          </ul>
+          <p>Search the JS bundle for these strings first. Nine times out of ten it narrows a huge app down to two or three components worth actually testing.</p>
+
+          <h2>Mutation XSS (mXSS)</h2>
+          <p>Sanitizers work by parsing HTML into a tree, stripping dangerous nodes, and serializing it back to a string. mXSS happens when the browser re-parses that "clean" output differently than the sanitizer expected, and a dangerous tag reassembles itself in the DOM. It's a great example of why testing a sanitizer in isolation isn't the same as testing it inside the actual browser and actual DOM context it runs in &mdash; behavior can differ between parsing passes in ways that are easy to miss on paper.</p>
+
+          <h2>DOM clobbering</h2>
+          <p>If a script does something like <code>document.getElementById('config').value</code> without first checking that the element is what it expects, you can sometimes "clobber" that reference by injecting an <code>&lt;a name="config"&gt;</code> or <code>&lt;form&gt;</code> element earlier in the page, redefining what that global name resolves to. It's a quiet bug class because there's no <code>&lt;script&gt;</code> tag involved at all &mdash; just HTML shaping how JavaScript resolves identifiers.</p>
+
+          <h2>Content Security Policy: read it before you try to break it</h2>
+          <p>A CSP header is a list of promises. My first move on any target is just reading it carefully:</p>
+          <pre><code>Content-Security-Policy: script-src 'self' 'nonce-r4nd0m123' https://cdn.example.com;
+  object-src 'none'; base-uri 'self';</code></pre>
+          <p>Questions I ask about a policy like this:</p>
+          <ul>
+            <li>Is the nonce actually random per-response, or reused/predictable?</li>
+            <li>Does the allow-listed CDN host any JSONP endpoints or old library versions with known sandbox-escaping gadgets?</li>
+            <li>Is <code>base-uri</code> restricted? Without it, an injected <code>&lt;base&gt;</code> tag can hijack relative script paths elsewhere on the page.</li>
+            <li>Is there an <code>unsafe-inline</code> fallback left in for browsers that don't support nonces, that a modern browser will also happily honor if the nonce check fails open?</li>
+          </ul>
+          <p>A policy with <code>strict-dynamic</code> and a properly random nonce is genuinely hard to bypass. A policy with a wildcard subdomain in <code>script-src</code> is a policy with a hole in it &mdash; you just have to find what's hosted on one of those subdomains.</p>
+
+          <h2>A generic, illustrative payload</h2>
+          <p>For a plain reflected sink with no sanitization at all, the textbook proof-of-concept is still the fastest way to confirm the bug exists before investing time in bypassing anything fancier:</p>
+          <pre><code>&lt;img src=x onerror=alert(document.domain)&gt;</code></pre>
+          <p>I use <code>alert(document.domain)</code> specifically because it proves the injection executes in the target's origin, which is the detail that actually matters for impact &mdash; not just that a dialog box popped up.</p>
+
+          <div class="callout warn">
+            <strong>Impact, not fireworks</strong>
+            An <code>alert()</code> is a proof of concept, not a finding. The report that gets paid explains what an attacker does next: steal a session token, perform actions as the victim via a hidden fetch, or pivot into an internal admin panel. Show the realistic next step, even briefly.
+          </div>
+
+          <h2>Key takeaways</h2>
+          <div class="callout">
+            <strong>Key takeaways</strong>
+            <ul style="margin-top:8px;">
+              <li>Grep the bundle for <code>dangerouslySetInnerHTML</code>, <code>v-html</code>, and <code>bypassSecurityTrustHtml</code> first</li>
+              <li>Read the CSP like a contract and look for the clause with the loophole</li>
+              <li>Don't ignore DOM-based sinks just because the network tab looks clean</li>
+              <li>Always demonstrate impact beyond a popup</li>
+            </ul>
+          </div>
+
+          <div class="post-footer">
+            <div class="post-nav">
+              <a href="ssrf-blind-to-full-read.html">
+                <span>&larr; previous</span>
+                <span class="title">SSRF Hunting: From Blind Callbacks to Full Internal Read</span>
+              </a>
+              <a class="next" href="idor-access-control-guide.html">
+                <span>next &rarr;</span>
+                <span class="title">Breaking Access Control: A Practical Guide to Finding IDORs</span>
+              </a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-wrap">
+      <p>&copy; <span id="year"></span> worr4bl33hwder. Built with HTML, CSS &amp; vanilla JS. No trackers, no cookies, no frameworks.</p>
+      <div class="footer-links">
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact">contact</a>
+        <a href="https://github.com/watermelonich" target="_blank" rel="noopener noreferrer">github</a>
+      </div>
+    </div>
+  </footer>
+
+  <button class="back-to-top" id="back-to-top" aria-label="Back to top">&uarr;</button>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/blog.js"></script>
+</body>
+</html>

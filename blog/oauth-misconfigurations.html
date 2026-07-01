@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OAuth Misconfigurations: A Bug Bounty Hunter's Checklist — worr4bl33hwder</title>
+  <meta name="description" content="Redirect URI validation, state parameters, and the handful of OAuth mistakes that keep leading to account takeover." />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="site-header" id="site-header">
+    <div class="container nav-wrap">
+      <a href="../index.html" class="brand"><span class="brand-prompt">worr4bl33hwder</span><span class="cursor-blink">_</span></a>
+      <nav class="nav-links" id="nav-links">
+        <a href="../index.html#about">about</a>
+        <a href="../index.html#focus">focus</a>
+        <a href="../index.html#writeups">writeups</a>
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact" class="nav-cta">contact</a>
+      </nav>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="post-header">
+      <div class="container">
+        <div class="post-meta">
+          <span class="tag-pill">Auth</span><span>Feb 25, 2026</span><span>&middot;</span><span>8 min read</span>
+        </div>
+        <h1>OAuth Misconfigurations: A Bug Bounty Hunter&rsquo;s Checklist</h1>
+        <p class="lead">OAuth is a solid protocol. Most of the bugs I find aren't in the spec &mdash; they're in what implementations quietly skip.</p>
+      </div>
+    </section>
+
+    <section class="post-body">
+      <div class="container">
+        <article class="article">
+          <div class="disclaimer"><strong>Heads up:</strong> Educational content only. Only test systems you're explicitly authorized to test, and always follow the rules of the program you're hacking on.</div>
+
+          <div class="callout">
+            <strong>TL;DR</strong>
+            Almost every OAuth finding I report comes down to one of three things: loose redirect_uri validation, a missing or unchecked state parameter, or a token that leaks somewhere it shouldn't &mdash; a referrer header, a browser history entry, or a log line.
+          </div>
+
+          <p>OAuth 2.0 gets a bad reputation for being "insecure," which isn't really fair &mdash; the spec, used correctly, is solid. The problem is that it has a lot of optional pieces, and "optional" has a way of turning into "skipped" under a deadline. This is my running checklist for where that shows up.</p>
+
+          <h2>1. redirect_uri validation</h2>
+          <p>The authorization server should only ever send the authorization code or token to a redirect URI that was pre-registered for that client. When validation is loose, you get an open redirect that leaks live credentials instead of just a boring URL. Variations worth testing:</p>
+          <ul>
+            <li><strong>Exact match vs. prefix match</strong> &mdash; if the server checks that the redirect starts with the registered value instead of matching it exactly, <code>https://app.target.com.attacker.com</code> or <code>https://app.target.com/../evil</code> might pass</li>
+            <li><strong>Path traversal after a valid host</strong> &mdash; <code>https://app.target.com/callback/../../oauth-relay</code> if any open-redirect endpoint exists elsewhere on the same host</li>
+            <li><strong>Subdomain wildcards registered too broadly</strong> &mdash; if <code>*.target.com</code> is accepted and an attacker controls or can find an XSS/open-redirect on any subdomain, that's enough</li>
+            <li><strong>Missing scheme enforcement</strong> &mdash; some implementations forget to check that the scheme matches too, letting a registered <code>https</code> callback also accept an equivalent-looking non-https redirect in edge cases</li>
+          </ul>
+          <pre><code>GET /oauth/authorize?client_id=abc123
+  &redirect_uri=https://app.target.com.attacker.com/callback
+  &response_type=code&scope=profile HTTP/1.1
+Host: auth.target.com</code></pre>
+
+          <h2>2. The state parameter, or the lack of one</h2>
+          <p><code>state</code> exists specifically to prevent CSRF against the OAuth flow itself. Without it &mdash; or with it present but never actually validated server-side &mdash; an attacker can start their own OAuth flow, capture the resulting authorization code, and trick a victim into completing it in their browser. The victim ends up with the attacker's identity linked to their account, or vice versa, depending on the flow. It's a quiet bug because the login still "works" from the victim's point of view; nothing looks broken.</p>
+          <p>Test it directly: start a flow, strip or reuse an old <code>state</code> value, and see if the callback still completes successfully.</p>
+
+          <h2>3. Implicit flow token leakage</h2>
+          <p>Implicit flow returns the access token directly in the URL fragment. Fragments aren't sent to the server in the <code>Referer</code> header by spec, but that protection disappears the moment any script on the page reads <code>location.href</code> and forwards it somewhere &mdash; analytics scripts are a common accidental culprit. If a client still uses implicit flow, check what third-party scripts run on the redirect page and whether any of them capture the full URL.</p>
+
+          <h2>4. PKCE, and what happens without it</h2>
+          <p>PKCE (Proof Key for Code Exchange) exists to stop an intercepted authorization code from being exchanged by anyone other than the client that requested it &mdash; originally for public clients like mobile and SPA apps that can't hold a secret safely. Where PKCE is missing or optional rather than enforced, an intercepted or leaked authorization code (via a referrer, a logging system, or a malicious app on the same device) can potentially be redeemed by someone other than the legitimate client. If the authorization server accepts a token exchange with a code but no matching <code>code_verifier</code> at all, that's worth flagging directly.</p>
+
+          <h2>5. Scope escalation</h2>
+          <p>Some authorization servers trust the <code>scope</code> parameter more than they should. Try requesting scopes broader than what the client normally asks for:</p>
+          <pre><code>GET /oauth/authorize?client_id=abc123
+  &redirect_uri=https://app.target.com/callback
+  &response_type=code&scope=profile+email+admin:write HTTP/1.1</code></pre>
+          <p>If the consent screen doesn't clearly show the requested scopes, or the server grants scopes the client was never approved for, that's a real finding &mdash; especially if it lets a low-trust integration obtain high-trust access.</p>
+
+          <h2>6. Client secret exposure</h2>
+          <p>Mobile apps and SPAs sometimes ship a "confidential client" secret directly in the compiled app or JS bundle because migrating to a public-client flow properly (PKCE, no secret) was more work. Decompiling an APK or reading a JS bundle for a hardcoded <code>client_secret</code> is a five-minute check that occasionally pays off big, since that secret combined with a loose redirect_uri check can sometimes let an attacker impersonate the legitimate client entirely.</p>
+
+          <div class="callout">
+            <strong>Key takeaways</strong>
+            <ul style="margin-top:8px;">
+              <li>Test redirect_uri validation with subdomains, path traversal, and prefix-match tricks</li>
+              <li>Confirm state is both present and actually validated, not just decorative</li>
+              <li>Check for PKCE enforcement, especially on public clients</li>
+              <li>Grep mobile app binaries and JS bundles for hardcoded client secrets</li>
+            </ul>
+          </div>
+
+          <div class="post-footer">
+            <div class="post-nav">
+              <a href="graphql-security-pitfalls.html">
+                <span>&larr; previous</span>
+                <span class="title">GraphQL Security Pitfalls I Keep Finding in Bug Bounty Programs</span>
+              </a>
+              <a class="next" href="recon-methodology.html">
+                <span>next &rarr;</span>
+                <span class="title">My Recon Methodology for Bug Bounty Targets</span>
+              </a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-wrap">
+      <p>&copy; <span id="year"></span> worr4bl33hwder. Built with HTML, CSS &amp; vanilla JS. No trackers, no cookies, no frameworks.</p>
+      <div class="footer-links">
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact">contact</a>
+        <a href="https://github.com/watermelonich" target="_blank" rel="noopener noreferrer">github</a>
+      </div>
+    </div>
+  </footer>
+
+  <button class="back-to-top" id="back-to-top" aria-label="Back to top">&uarr;</button>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/blog.js"></script>
+</body>
+</html>

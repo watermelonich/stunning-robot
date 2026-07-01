@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GraphQL Security Pitfalls I Keep Finding in Bug Bounty Programs — worr4bl33hwder</title>
+  <meta name="description" content="Introspection left on, batching abuse, and authorization checks that only exist at the REST layer everyone forgot about." />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="site-header" id="site-header">
+    <div class="container nav-wrap">
+      <a href="../index.html" class="brand"><span class="brand-prompt">worr4bl33hwder</span><span class="cursor-blink">_</span></a>
+      <nav class="nav-links" id="nav-links">
+        <a href="../index.html#about">about</a>
+        <a href="../index.html#focus">focus</a>
+        <a href="../index.html#writeups">writeups</a>
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact" class="nav-cta">contact</a>
+      </nav>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="post-header">
+      <div class="container">
+        <div class="post-meta">
+          <span class="tag-pill">API Security</span><span>Jan 30, 2026</span><span>&middot;</span><span>9 min read</span>
+        </div>
+        <h1>GraphQL Security Pitfalls I Keep Finding in Bug Bounty Programs</h1>
+        <p class="lead">GraphQL didn't introduce new vulnerability classes so much as it gave the old ones a new place to hide.</p>
+      </div>
+    </section>
+
+    <section class="post-body">
+      <div class="container">
+        <article class="article">
+          <div class="disclaimer"><strong>Heads up:</strong> Educational content only. Only test systems you're explicitly authorized to test, and always follow the rules of the program you're hacking on.</div>
+
+          <div class="callout">
+            <strong>TL;DR</strong>
+            Start with introspection to map the entire schema for free, then check whether authorization is actually enforced per-field and per-resolver instead of just at the top level, and test whether batching or aliasing lets you bypass rate limits.
+          </div>
+
+          <p>Teams migrating from REST to GraphQL often bring their REST-era security assumptions with them, and those assumptions don't map cleanly. A REST API with one authorization check per route is a very different shape from a GraphQL API with one resolver per field, each of which needs its own check. That mismatch is where most of what I find actually lives.</p>
+
+          <h2>1. Introspection: the schema handed to you for free</h2>
+          <p>If introspection is enabled in production &mdash; and it still often is &mdash; you can request the entire schema in one query, including types, fields, and mutations that were never meant to be public knowledge:</p>
+          <pre><code>POST /graphql HTTP/1.1
+Content-Type: application/json
+
+{"query":"{ __schema { types { name fields { name } } } } "}</code></pre>
+          <p>This alone regularly reveals admin-only mutations, internal-sounding types, and fields that hint at features not yet exposed in the UI. Even when introspection is disabled, tools like <code>clairvoyance</code> can often reconstruct a usable schema through targeted field-guessing, since GraphQL's error messages are frequently more descriptive than intended.</p>
+
+          <h2>2. Field-level authorization gaps</h2>
+          <p>This is the big one. Plenty of GraphQL APIs check authorization at the query root &mdash; "is this user allowed to query <code>user</code>?" &mdash; but not on every nested field within it. That means a query like this can sometimes return data the requester was never supposed to see:</p>
+          <pre><code>{
+  user(id: "4821") {
+    name
+    email
+    billingAddress
+    internalRiskScore
+    supportTickets { subject, body }
+  }
+}</code></pre>
+          <p>If <code>internalRiskScore</code> or <code>supportTickets</code> were meant to be admin-only fields but the resolver for the parent <code>user</code> type is the only place authorization is checked, a regular user asking for those nested fields directly can bypass it entirely. This is functionally an IDOR, just expressed through field selection instead of a URL parameter.</p>
+
+          <h2>3. Batching and aliasing to bypass rate limits</h2>
+          <p>Rate limiting built for REST usually counts HTTP requests. GraphQL lets a client bundle many logical operations into a single HTTP request using aliases:</p>
+          <pre><code>{
+  attempt1: login(username: "victim", password: "guess1") { token }
+  attempt2: login(username: "victim", password: "guess2") { token }
+  attempt3: login(username: "victim", password: "guess3") { token }
+  ...
+}</code></pre>
+          <p>If the backend only counts this as one request for rate-limiting purposes, that's hundreds of effective attempts hiding inside a request budget meant to allow only a handful. This applies well beyond login &mdash; password reset tokens, coupon codes, and OTP verification are all common aliasing targets.</p>
+
+          <h2>4. Denial of service via nested or recursive queries</h2>
+          <p>GraphQL's ability to nest related objects arbitrarily deep is a feature that doubles as a resource exhaustion vector if the server doesn't cap query depth or computational cost:</p>
+          <pre><code>{
+  user(id: "1") {
+    friends {
+      friends {
+        friends {
+          friends { name }
+        }
+      }
+    }
+  }
+}</code></pre>
+          <p>Each additional nesting level can multiply the number of database lookups the resolver chain performs. Without query depth limiting, complexity scoring, or pagination enforcement, a handful of deeply nested requests can meaningfully load the backend &mdash; worth testing carefully and in a way that respects the program's availability expectations.</p>
+
+          <h2>5. Excessive data exposure by default</h2>
+          <p>Because a single GraphQL type is often reused across many different queries, it's common for a resolver to fetch and return an entire database row internally, then rely on the client to only ask for the fields it needs. If any part of the response pipeline logs the full resolver output, or if a client library caches the complete response, fields the frontend never displays can still leak.</p>
+
+          <h2>Tools that help</h2>
+          <ul>
+            <li><strong>InQL</strong> &mdash; Burp extension for schema exploration and generating query templates from introspection</li>
+            <li><strong>GraphQL Voyager</strong> &mdash; visualizes the schema as a graph, useful for spotting types that hint at unreleased features</li>
+            <li><strong>graphql-cop</strong> &mdash; automated checks for common misconfigurations like introspection exposure and missing query depth limits</li>
+          </ul>
+
+          <div class="callout">
+            <strong>Key takeaways</strong>
+            <ul style="margin-top:8px;">
+              <li>Introspection, when enabled, maps the entire attack surface in one request</li>
+              <li>Check authorization at the field level, not just the query root</li>
+              <li>Aliasing can turn one rate-limited request into hundreds of effective attempts</li>
+              <li>Query depth and complexity limits matter as much as authentication does</li>
+            </ul>
+          </div>
+
+          <div class="post-footer">
+            <div class="post-nav">
+              <a href="writing-better-bug-bounty-reports.html">
+                <span>&larr; previous</span>
+                <span class="title">Writing Bug Bounty Reports That Actually Get Triaged (and Paid)</span>
+              </a>
+              <a class="next" href="oauth-misconfigurations.html">
+                <span>next &rarr;</span>
+                <span class="title">OAuth Misconfigurations: A Bug Bounty Hunter&rsquo;s Checklist</span>
+              </a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-wrap">
+      <p>&copy; <span id="year"></span> worr4bl33hwder. Built with HTML, CSS &amp; vanilla JS. No trackers, no cookies, no frameworks.</p>
+      <div class="footer-links">
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact">contact</a>
+        <a href="https://github.com/watermelonich" target="_blank" rel="noopener noreferrer">github</a>
+      </div>
+    </div>
+  </footer>
+
+  <button class="back-to-top" id="back-to-top" aria-label="Back to top">&uarr;</button>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/blog.js"></script>
+</body>
+</html>

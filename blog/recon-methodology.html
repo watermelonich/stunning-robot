@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Recon Methodology for Bug Bounty Targets — worr4bl33hwder</title>
+  <meta name="description" content="How I go from a bare root domain to a prioritized list of interesting targets, and the pipeline that automates most of it." />
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <header class="site-header" id="site-header">
+    <div class="container nav-wrap">
+      <a href="../index.html" class="brand"><span class="brand-prompt">worr4bl33hwder</span><span class="cursor-blink">_</span></a>
+      <nav class="nav-links" id="nav-links">
+        <a href="../index.html#about">about</a>
+        <a href="../index.html#focus">focus</a>
+        <a href="../index.html#writeups">writeups</a>
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact" class="nav-cta">contact</a>
+      </nav>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="post-header">
+      <div class="container">
+        <div class="post-meta">
+          <span class="tag-pill">Recon</span><span>Mar 20, 2026</span><span>&middot;</span><span>11 min read</span>
+        </div>
+        <h1>My Recon Methodology for Bug Bounty Targets</h1>
+        <p class="lead">Bugs get found by whoever looks at the right asset first. Good recon is how you make sure that's you.</p>
+      </div>
+    </section>
+
+    <section class="post-body">
+      <div class="container">
+        <article class="article">
+          <div class="disclaimer"><strong>Heads up:</strong> Educational content only. Only test systems you're explicitly authorized to test, and always follow the rules of the program you're hacking on.</div>
+
+          <div class="callout">
+            <strong>TL;DR</strong>
+            Enumerate subdomains from as many sources as possible, probe them all for live HTTP services, screenshot and triage by what's actually running, then mine JavaScript for endpoints and parameters no one else bothered to read.
+          </div>
+
+          <p>On a mature program, the login page has been tested by a thousand other researchers before you got there. The forgotten staging subdomain from three product pivots ago has been tested by maybe nobody. Recon is how you find the second thing instead of the first.</p>
+
+          <h2>1. Subdomain enumeration, from every angle</h2>
+          <p>No single source finds everything, so I run several in parallel and merge the results:</p>
+          <pre><code># passive sources
+subfinder -d target.com -all -o subs_subfinder.txt
+amass enum -passive -d target.com -o subs_amass.txt
+
+# certificate transparency
+curl -s "https://crt.sh/?q=%25.target.com&output=json" | jq -r '.[].name_value' | sort -u > subs_crtsh.txt
+
+# merge + dedupe
+cat subs_*.txt | sort -u > all_subs.txt</code></pre>
+          <p>I also check Wayback Machine and <code>gau</code> for historical hostnames that might not resolve to anything obvious today but still point at a live service:</p>
+          <pre><code>gau --subs target.com | unfurl domains | sort -u >> all_subs.txt</code></pre>
+
+          <h2>2. Resolve and probe for what's actually alive</h2>
+          <p>A list of hostnames is just a list until you know which ones respond. <code>httpx</code> handles resolution, live-host probing, and useful metadata (status code, title, tech stack, response size) in one pass:</p>
+          <pre><code>httpx -l all_subs.txt -sc -title -tech-detect -o live_hosts.txt</code></pre>
+          <p>This turns thousands of raw hostnames into a few hundred confirmed live web services, each already tagged with what it's likely running.</p>
+
+          <h2>3. Screenshot and triage</h2>
+          <p>Reading a few hundred status codes and titles is doable. Scanning a wall of screenshots is faster, and it's how login portals, admin panels, and "under construction" pages jump out immediately:</p>
+          <pre><code>gowitness file -f live_hosts.txt --write-db</code></pre>
+          <p>I sort by what looks interesting first: anything that says "admin," "staging," "internal," or "dev" in the title or URL, anything running a visibly outdated tech stack, and anything that looks like it was stood up for a single feature and forgotten.</p>
+
+          <h2>4. Read the JavaScript &mdash; all of it</h2>
+          <p>Modern frontends ship most of the application's routing and API surface as JavaScript. That means the JS bundle is documentation the developers didn't mean to publish:</p>
+          <ul>
+            <li><strong>LinkFinder</strong> or a custom regex pass to pull out endpoint paths and full URLs from bundled JS</li>
+            <li><strong>Grepping for API base URLs</strong>, especially ones pointing at internal-sounding hostnames like <code>internal-api</code> or <code>admin-svc</code></li>
+            <li><strong>Secret scanning</strong> across the same bundles &mdash; hardcoded keys, tokens, or internal service URLs show up more often than they should</li>
+          </ul>
+          <pre><code>for js in $(cat js_files.txt); do
+  curl -s "$js" | grep -oE "(\"|')(\/api\/[a-zA-Z0-9_\-\/\.]+)(\"|')"
+done | sort -u > discovered_endpoints.txt</code></pre>
+
+          <h2>5. Parameter discovery</h2>
+          <p>Endpoints without known parameters aren't fully mapped yet. <code>arjun</code> and historical URL mining fill that gap:</p>
+          <pre><code>arjun -u https://app.target.com/api/search -oT params_found.txt
+gau target.com | grep "?" | unfurl keys | sort -u >> params_found.txt</code></pre>
+          <p>Hidden or debug parameters (<code>?debug=1</code>, <code>?admin=true</code>, <code>?format=json</code>) surface surprisingly often this way, and they're worth testing even when the "normal" version of the endpoint looks solid.</p>
+
+          <h2>6. Turn it into a repeatable pipeline</h2>
+          <p>None of this is useful if you run it once. New subdomains and endpoints appear constantly, so the last step is stitching the above into something that runs on a schedule and only shows you what's <em>new</em> since the last run &mdash; a simple diff against the previous output is enough to turn recon into a standing advantage instead of a one-time sweep.</p>
+
+          <div class="callout warn">
+            <strong>Respect scope</strong>
+            Passive sources and light active probing (DNS resolution, HTTP status checks) are generally low-risk, but always check the program's scope and rules of engagement before running anything heavier, and never scan assets explicitly listed as out of scope.
+          </div>
+
+          <div class="callout">
+            <strong>Key takeaways</strong>
+            <ul style="margin-top:8px;">
+              <li>Merge multiple subdomain sources &mdash; passive, certificate transparency, and historical archives all find different things</li>
+              <li>Screenshots make triage across hundreds of hosts fast</li>
+              <li>JS bundles are an endpoint map developers didn't intend to publish &mdash; read them</li>
+              <li>Automate the whole pipeline and diff against previous runs to catch new attack surface early</li>
+            </ul>
+          </div>
+
+          <div class="post-footer">
+            <div class="post-nav">
+              <a href="oauth-misconfigurations.html">
+                <span>&larr; previous</span>
+                <span class="title">OAuth Misconfigurations: A Bug Bounty Hunter&rsquo;s Checklist</span>
+              </a>
+              <a class="next" href="race-conditions-bug-bounty.html">
+                <span>next &rarr;</span>
+                <span class="title">Race Conditions in Web Apps: Winning the Bug Bounty Lottery</span>
+              </a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-wrap">
+      <p>&copy; <span id="year"></span> worr4bl33hwder. Built with HTML, CSS &amp; vanilla JS. No trackers, no cookies, no frameworks.</p>
+      <div class="footer-links">
+        <a href="index.html">blog</a>
+        <a href="../index.html#contact">contact</a>
+        <a href="https://github.com/watermelonich" target="_blank" rel="noopener noreferrer">github</a>
+      </div>
+    </div>
+  </footer>
+
+  <button class="back-to-top" id="back-to-top" aria-label="Back to top">&uarr;</button>
+
+  <script src="../js/main.js"></script>
+  <script src="../js/blog.js"></script>
+</body>
+</html>
