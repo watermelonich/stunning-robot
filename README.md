@@ -1,19 +1,21 @@
 # worr4bl33hwder — portfolio
 
-A static portfolio + blog for a web security researcher / bug bounty hunter persona. Pure HTML, CSS, and vanilla JavaScript — no build step, no frameworks, no CDN dependencies. Built to host on GitHub Pages as-is.
+A static portfolio + blog for an application security researcher (AppSec / Reverse Engineering / Smart Contract audits). Pure HTML, CSS, and vanilla JavaScript — no build step, no frameworks, no CDN dependencies. Built to host on GitHub Pages as-is.
+
+The visual direction is a dark technical atlas rather than a terminal-themed security site: layered charcoal surfaces, compact grotesk and monospace type, restrained cobalt/safety-orange signals, coordinate labels, and a schematic research-surface panel.
 
 ## Structure
 
 ```
 .
-├── index.html                  # landing page (hero, about, focus areas, featured writeups, contact)
+├── index.html                  # landing page (hero + scope map, about, coverage matrix, notes, contact)
 ├── blog/
-│   ├── index.html               # blog index with search + tag filtering
+│   ├── index.html               # archive with search + tag filtering
 │   └── *.html                   # 10 individual blog posts
 ├── css/
-│   └── style.css                # entire design system (design tokens, components, responsive rules)
+│   └── style.css                # entire design system (tokens, components, responsive rules)
 ├── js/
-│   ├── main.js                  # nav, hero typing effect, terminal easter egg, scroll reveal, copy buttons
+│   ├── main.js                  # nav, scroll reveal, back-to-top, copy-code buttons
 │   └── blog.js                  # blog search + category filtering
 ├── assets/
 │   └── favicon.svg
@@ -43,15 +45,16 @@ Because every internal link uses relative paths (`css/style.css`, `blog/index.ht
 
 Before publishing, update the placeholder content:
 
-- **Contact info** — GitHub, HackerOne, and Code4rena links in [index.html](index.html) (`#contact` section) and in the terminal command data in [js/main.js](js/main.js)
-- **Bio** — the `about.txt` copy and `~/profile.json` card in the About section
+- **Contact info** — GitHub, HackerOne, and Code4rena links in [index.html](index.html) (`#contact` section)
+- **Research surface** — the hero-right panel in [index.html](index.html) (`.scope-map` block); update the three disciplines, details, and method line as needed
+- **Bio** — the About prose and the Profile panel in the About section
 - **Handle** — a project-wide find-and-replace of `worr4bl33hwder` if you want to use a different handle
 - **Blog posts** — the 10 posts under [blog/](blog/) are original educational write-ups on common bug bounty topics (IDOR, XSS/CSP, SSRF, race conditions, recon, OAuth, GraphQL, report writing, JWT, subdomain takeover). Swap in your own real write-ups and dates as you publish them, and update the featured cards on the homepage and the post-to-post prev/next links in each article if you add or remove posts.
-- **Favicon** — [assets/favicon.svg](assets/favicon.svg) is a simple `>_` mark; replace with your own if desired.
+- **Favicon** — [assets/favicon.svg](assets/favicon.svg) uses the same overlapping cobalt/orange squares as the header mark; replace it with your own if desired.
 
 ## Notes
 
-- Dark theme only, by design.
+- Dark technical theme with layered graphite surfaces and a near-black schematic panel, by design.
 - No external font/analytics/tracking requests — everything is self-contained.
-- The hero terminal is a cosmetic easter egg (`help`, `whoami`, `about`, `skills`, `contact`, `neofetch`, `clear`, etc.) implemented in `initTerminal()` in [js/main.js](js/main.js) — it's not a real shell.
+- Uses system grotesk/sans and monospace stacks, so no font files are downloaded.
 - Respects `prefers-reduced-motion`.

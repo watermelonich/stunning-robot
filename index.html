@@ -31,48 +31,56 @@
     <!-- ================= HERO ================= -->
     <section class="hero">
       <div class="container hero-grid">
-        <div>
-          <span class="hero-tag reveal">// appsec &middot; reverse engineering &middot; smart contract audits</span>
-          <h1 class="reveal">Hi, I&rsquo;m <span class="grad">worr4bl33hwder</span>.<br />I break web apps, binaries, and smart contracts for a living.</h1>
-          <p class="lead reveal">Application security researcher and bug bounty hunter &mdash; breaking web apps, reverse engineering binaries in Binary Ninja Ultimate, and auditing smart contracts for the logic bugs automated tools walk right past.</p>
+        <div class="hero-copy">
+          <span class="hero-tag reveal">Independent security research</span>
+          <h1 class="reveal">worr4bl33hwder</h1>
+          <p class="hero-role reveal">AppSec <span>+</span> Reverse Engineering <span>+</span> Smart Contracts</p>
+          <p class="lead reveal">I test systems where assumptions become attack surface: web applications, native binaries, and EVM contracts. The work is equal parts mapping, code reading, and proving what should not be possible.</p>
           <div class="btn-row reveal">
-            <a href="blog/index.html" class="btn btn-primary">Read the Blog</a>
-            <a href="#contact" class="btn btn-outline">Get In Touch</a>
+            <a href="#focus" class="btn btn-primary">View coverage</a>
+            <a href="blog/index.html" class="btn btn-outline">Open field notes</a>
           </div>
         </div>
 
-        <div class="reveal">
-          <div class="terminal" id="hero-terminal">
-            <div class="terminal-bar">
-              <span class="dot dot-red"></span><span class="dot dot-amber"></span><span class="dot dot-green"></span>
-              <span class="terminal-title">worr4bl33hwder@bugbounty:~</span>
+        <aside class="scope-map reveal" aria-label="Research coverage map">
+          <header class="scope-head">
+            <span>Research surface</span>
+            <span class="scope-index">03 / active</span>
+          </header>
+          <div class="scope-rows">
+            <div class="scope-row">
+              <span class="scope-code">01</span>
+              <div><strong>Web / AppSec</strong><span>Auth &middot; APIs &middot; logic &middot; access control</span></div>
+              <i aria-hidden="true"></i>
             </div>
-            <div class="terminal-body" id="terminal-body">
-              <p><span class="prompt">$</span>whoami</p>
-              <p class="output">worr4bl33hwder</p>
-              <p><span class="prompt">$</span>cat role.txt</p>
-              <p class="output"><span id="typed-role"></span><span class="cursor-blink">_</span></p>
-              <p class="terminal-hint"># type <strong>help</strong> and hit enter</p>
-              <div id="terminal-log"></div>
-              <p class="terminal-input-row">
-                <span class="prompt">$</span>
-                <input type="text" id="terminal-input" autocomplete="off" spellcheck="false" aria-label="Terminal command input" />
-              </p>
+            <div class="scope-row">
+              <span class="scope-code">02</span>
+              <div><strong>Native / Binary</strong><span>Static analysis &middot; patch diffing &middot; RE</span></div>
+              <i aria-hidden="true"></i>
+            </div>
+            <div class="scope-row">
+              <span class="scope-code">03</span>
+              <div><strong>EVM / DLT</strong><span>Solidity &middot; protocol logic &middot; invariants</span></div>
+              <i aria-hidden="true"></i>
             </div>
           </div>
-        </div>
+          <footer class="scope-foot">
+            <span>Method</span>
+            <strong>MAP &rarr; TRACE &rarr; BREAK &rarr; VERIFY &rarr; REPORT</strong>
+          </footer>
+        </aside>
       </div>
     </section>
 
     <!-- ================= ABOUT ================= -->
     <section id="about">
       <div class="container">
-        <span class="eyebrow reveal">about</span>
+        <span class="eyebrow reveal"><span class="part">01 / 04</span>About</span>
         <h2 class="section-heading reveal">Still here after the 500th duplicate report.</h2>
 
         <div class="about-grid">
           <div class="reveal">
-            <p class="lead-line">$ cat about.txt</p>
+            <p class="lead-line">Origin / operating model</p>
             <p>I got into security the way a lot of people do: by breaking something I wasn&rsquo;t supposed to, panicking a little, and then reading way too much about how it worked. These days I do it on purpose, with permission, and get paid for it.</p>
             <p>My focus is on the bugs that live in application logic rather than in a CVE database &mdash; broken access control, authorization bypasses, authentication flaws, and the weird edge cases APIs leave wide open. I spend more time reading JavaScript bundles and API responses than running scanners.</p>
             <p>That instinct doesn&rsquo;t stop at the browser. I pop binaries open in Binary Ninja Ultimate when an API alone doesn&rsquo;t tell the whole story, and I audit Solidity contracts for DeFi protocols through competitive contests on Code4rena. Different attack surface, same assumption: the logic is wrong until proven otherwise.</p>
@@ -81,7 +89,7 @@
           </div>
 
           <div class="file-card reveal">
-            <h3>~/profile.json</h3>
+            <h3>Current profile</h3>
             <ul>
               <li><span>role</span><span>AppSec Researcher / RE / Auditor</span></li>
               <li><span>focus</span><span>AppSec, RE &amp; Smart Contracts</span></li>
@@ -98,70 +106,91 @@
     <!-- ================= FOCUS AREAS ================= -->
     <section id="focus">
       <div class="container">
-        <span class="eyebrow reveal">focus areas</span>
-        <h2 class="section-heading reveal">What I actually spend my time on</h2>
-        <p class="section-sub reveal">No two targets are the same, but most of my work falls into one of these buckets &mdash; web, binaries, or smart contracts.</p>
+        <span class="eyebrow reveal"><span class="part">02 / 04</span>Coverage Matrix</span>
+        <h2 class="section-heading reveal">Where the time actually goes.</h2>
+        <p class="section-sub reveal">No two targets are the same, but most of my work falls into one of these buckets &mdash; whether it&rsquo;s the web, a binary, or a smart contract.</p>
 
         <div class="card-grid">
           <div class="card reveal">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M7 11V7a5 5 0 0 1 9-3"/></svg>
-            <h3>Access Control &amp; IDOR</h3>
-            <p>Object-level authorization bugs, BOLA, and horizontal/vertical privilege escalation across web and mobile APIs.</p>
+            <span class="card-num">01 / 09</span>
+            <div>
+              <h3>Access Control &amp; IDOR</h3>
+              <p>Object-level authorization bugs, BOLA, and horizontal/vertical privilege escalation across web and mobile APIs. The unglamorous class that still pays.</p>
+            </div>
           </div>
 
           <div class="card reveal">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <h3>Auth, Session &amp; OAuth</h3>
-            <p>Login flow abuse, JWT attacks, session fixation, and OAuth/SSO misconfigurations that lead to account takeover.</p>
+            <span class="card-num">02 / 09</span>
+            <div>
+              <h3>Auth, Session &amp; OAuth</h3>
+              <p>Login flow abuse, JWT attacks, session fixation, and OAuth/SSO misconfigurations that lead quietly to account takeover.</p>
+            </div>
           </div>
 
           <div class="card reveal">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><line x1="7" y1="7" x2="7.01" y2="7"/><line x1="7" y1="17" x2="7.01" y2="17"/></svg>
-            <h3>SSRF &amp; Server-Side</h3>
-            <p>Webhooks, URL previews, PDF/image processors, and anything that makes an outbound request on my behalf.</p>
+            <span class="card-num">03 / 09</span>
+            <div>
+              <h3>SSRF &amp; Server-Side</h3>
+              <p>Webhooks, URL previews, PDF and image processors &mdash; any feature that makes an outbound request on my behalf is worth a closer look.</p>
+            </div>
           </div>
 
           <div class="card reveal">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 2 12 8 18"/><polyline points="16 6 22 12 16 18"/></svg>
-            <h3>XSS &amp; Client-Side</h3>
-            <p>Reflected/stored/DOM XSS, CSP bypasses, and the fun edge cases introduced by modern frontend frameworks.</p>
+            <span class="card-num">04 / 09</span>
+            <div>
+              <h3>XSS &amp; Client-Side</h3>
+              <p>Reflected, stored, and DOM XSS; CSP bypasses; the edge cases modern frontend frameworks quietly reintroduce.</p>
+            </div>
           </div>
 
           <div class="card reveal">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg>
-            <h3>API &amp; GraphQL Security</h3>
-            <p>Introspection leaks, batching abuse, excessive data exposure, and missing field-level authorization.</p>
+            <span class="card-num">05 / 09</span>
+            <div>
+              <h3>API &amp; GraphQL Security</h3>
+              <p>Introspection leaks, batching abuse, excessive data exposure, and missing field-level authorization on schemas that were never meant to be public.</p>
+            </div>
           </div>
 
           <div class="card reveal">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="7 9 11 12 7 15"/><line x1="12" y1="15" x2="17" y2="15"/></svg>
-            <h3>Recon &amp; Automation</h3>
-            <p>Subdomain enumeration, JS analysis, and small pipelines that keep new attack surface flowing in automatically.</p>
+            <span class="card-num">06 / 09</span>
+            <div>
+              <h3>Recon &amp; Automation</h3>
+              <p>Subdomain enumeration, JavaScript analysis, and small pipelines that keep new attack surface flowing in automatically instead of by chance.</p>
+            </div>
           </div>
 
           <div class="card reveal">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1.5"/><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="1" x2="9" y2="3"/><line x1="15" y1="1" x2="15" y2="3"/><line x1="9" y1="21" x2="9" y2="23"/><line x1="15" y1="21" x2="15" y2="23"/><line x1="1" y1="9" x2="3" y2="9"/><line x1="1" y1="15" x2="3" y2="15"/><line x1="21" y1="9" x2="23" y2="9"/><line x1="21" y1="15" x2="23" y2="15"/></svg>
-            <h3>Reverse Engineering</h3>
-            <p>Static and dynamic binary analysis in Binary Ninja Ultimate &mdash; unpacking, patch diffing, and figuring out what a binary actually does.</p>
+            <span class="card-num">07 / 09</span>
+            <div>
+              <h3>Reverse Engineering</h3>
+              <p>Static and dynamic binary analysis in <em>Binary Ninja Ultimate</em> &mdash; unpacking, patch diffing, and figuring out what a binary really does when the docs won&rsquo;t tell you.</p>
+            </div>
           </div>
 
           <div class="card reveal">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-            <h3>Smart Contract &amp; DLT Security</h3>
-            <p>Solidity/EVM logic bugs, reentrancy, access control, and economic exploits &mdash; audited through competitive contests on Code4rena.</p>
+            <span class="card-num">08 / 09</span>
+            <div>
+              <h3>Smart Contract &amp; DLT Security</h3>
+              <p>Solidity and EVM logic bugs &mdash; reentrancy, access control, and economic exploits &mdash; audited through competitive contests on <em>Code4rena</em>.</p>
+            </div>
           </div>
 
           <div class="card reveal">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-            <h3>Mobile &amp; Native AppSec</h3>
-            <p>iOS/Android app testing and native library review &mdash; insecure storage, hardcoded secrets, and the native code behind the UI.</p>
+            <span class="card-num">09 / 09</span>
+            <div>
+              <h3>Mobile &amp; Native AppSec</h3>
+              <p>iOS and Android app testing plus native library review &mdash; insecure storage, hardcoded secrets, and the native code lurking behind a pretty UI.</p>
+            </div>
           </div>
         </div>
 
         <div class="toolbox reveal">
-          <h3>~/toolbox</h3>
+          <h3>Toolbox</h3>
           <div class="tag-cloud">
             <span class="tag">Burp Suite</span>
+            <span class="tag">Binary Ninja</span>
+            <span class="tag">Foundry</span>
+            <span class="tag">Slither</span>
             <span class="tag">ffuf</span>
             <span class="tag">nuclei</span>
             <span class="tag">sqlmap</span>
@@ -175,11 +204,8 @@
             <span class="tag">Python</span>
             <span class="tag">Go</span>
             <span class="tag">Bash</span>
-            <span class="tag">Docker</span>
-            <span class="tag">Binary Ninja</span>
             <span class="tag">Solidity</span>
-            <span class="tag">Slither</span>
-            <span class="tag">Foundry</span>
+            <span class="tag">Docker</span>
           </div>
         </div>
       </div>
@@ -188,9 +214,9 @@
     <!-- ================= FEATURED WRITEUPS ================= -->
     <section id="writeups" class="section-alt">
       <div class="container">
-        <span class="eyebrow reveal">writeups</span>
-        <h2 class="section-heading reveal">Featured from the blog</h2>
-        <p class="section-sub reveal">Methodology, bugs, and lessons learned &mdash; written up in more detail than any report template allows.</p>
+        <span class="eyebrow reveal"><span class="part">03 / 04</span>Field Notes</span>
+        <h2 class="section-heading reveal">Selected technical write-ups.</h2>
+        <p class="section-sub reveal">Methodology, vulnerability classes, and lessons learned &mdash; written up in more detail than any report template allows.</p>
 
         <div class="blog-grid">
           <a class="post-card reveal" href="blog/idor-access-control-guide.html">
@@ -224,7 +250,7 @@
     <!-- ================= CONTACT ================= -->
     <section id="contact">
       <div class="container">
-        <span class="eyebrow reveal">contact</span>
+        <span class="eyebrow reveal"><span class="part">04 / 04</span>Contact</span>
         <h2 class="section-heading reveal">Have a target worth talking about?</h2>
         <p class="section-sub reveal">Private program invites, collaboration, or just want to talk about a weird auth bypass &mdash; here&rsquo;s where to find me.</p>
 
@@ -245,7 +271,7 @@
           </a>
         </div>
 
-        <p class="pgp-note reveal"># PGP fingerprint available on request for sensitive disclosures.</p>
+        <p class="pgp-note reveal">// PGP fingerprint available on request for sensitive disclosures.</p>
       </div>
     </section>
   </main>
